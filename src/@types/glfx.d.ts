@@ -9,5 +9,13 @@ declare module "glfx" {
     getPixelArray: () => Uint8Array;
     texture: (image: HTMLImageElement) => Texture;
   }
-  export class Texture {}
+  export class Texture {
+    _: Texture;
+    drawTo: (callback: () => void) => void;
+  }
+  export class Shader {
+    (): Shader;
+    drawRect: (left?: number, top?: number, right?: number, bottom?: number) => void;
+    static getDefaultShader: () => Shader;
+  }
 }

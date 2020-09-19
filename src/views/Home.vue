@@ -1,5 +1,5 @@
 <template>
-  <v-container class="home fill-height" fluid>
+  <v-container class="home fill-height">
     <v-row class="text-center">
       <ImageFile @select="onSelected" />
     </v-row>
