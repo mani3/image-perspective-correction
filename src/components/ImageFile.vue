@@ -16,14 +16,14 @@
 </template>
 
 <script lang="ts">
-import { Component, Emit, Vue, Prop, Watch } from "vue-property-decorator";
+import { Component, Emit, Vue } from "vue-property-decorator";
 
 @Component
 export default class ImageFile extends Vue {
   public item: File = new File([], "");
 
   @Emit()
-  public select(file: File) {}
+  public select(file: File) {} // eslint-disable-line
 
   public onChange(e: File) {
     this.item = e;
