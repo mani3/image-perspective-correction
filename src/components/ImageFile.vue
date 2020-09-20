@@ -26,8 +26,8 @@ export default class ImageFile extends Vue {
   public select(file: File) {}
 
   public onChange(e: File) {
-		this.item = e;
-		this.select(this.item);
+    this.item = e;
+    this.select(this.item);
   }
 }
 </script>

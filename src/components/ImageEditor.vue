@@ -2,40 +2,38 @@
   <v-container>
     <v-row>
       <v-col class="col-8">
-        <p>aaaa</p>
-
-        <div
-          id="image-preview"
-          class="image-preview"
-          ref="bounder"
-          v-bind:style="{ 'width': width * 0.5 + 'px', 'height': height * 0.5 + 'px' }"
-        >
-          <div id="view" style="width: 100%"></div>
-
-          <div
-            class="nub"
-            v-for="(nub, i) in nubs"
-            :key="i"
-            v-bind:id="i"
-            v-bind:style="{ 'left': nub.x + 'px', 'top': nub.y + 'px' }"
-            v-draggable="draggable"
-          ></div>
-        </div>
+        <h3>Image</h3>
         <canvas
           id="preview"
-          class="draw-canvas"
-          ref="preview"
-          v-bind:width="width"
-          v-bind:height="height"
-          v-bind:style="{ 'width': width * 0.5 + 'px', 'height': height * 0.5 + 'px' }"
+          class="preview"
+          v-bind:width="size"
+          v-bind:height="size"
+          style="width: 100%"
         />
         <div>
-          <span v-for="(nub, i) in nubs" :key="i">{{ i }}: {{ nub }}</span>
+          <code>{{ points }}</code>
         </div>
       </v-col>
       <v-col class="col-4">
-        <p>bbbb</p>
-        <canvas id="demo" class="demo" width="300" height="300"></canvas>
+        <h3>Cropped</h3>
+        <canvas
+          id="cropped"
+          class="preview"
+          v-bind:width="outputWidth"
+          v-bind:height="outputHeight"
+          style="width: 100%"
+        ></canvas>
+        <v-container>
+          <v-row>
+            <v-text-field v-model="outputWidth" label="Width" value="1024" suffix="px"></v-text-field>
+          </v-row>
+          <v-row>
+            <v-text-field v-model="outputHeight" label="Height" value="646" suffix="px"></v-text-field>
+          </v-row>
+          <v-row>
+            <v-btn block color="blue darken-1" dark @click="downloadFile">Download</v-btn>
+          </v-row>
+        </v-container>
       </v-col>
     </v-row>
   </v-container>
@@ -43,120 +41,46 @@
 
 <script lang="ts">
 import { Component, Emit, Vue, Prop, Watch } from "vue-property-decorator";
-import {
-  Draggable,
-  DraggableValue,
-  PositionDiff,
-  Position
-} from "draggable-vue-directive";
 import * as fx from "glfx";
 
 @Component({
-  directives: {
-    Draggable
-  }
+  directives: {}
 })
 export default class ImageEditor extends Vue {
   private width = 0;
   private height = 0;
+  private outputWidth = 1024;
+  private outputHeight = Math.round((1024 * 5.4) / 8.56);
 
-
-
-  private canvusSize(): { w: number; h: number } {
-    return { w: this.width * 0.5, h: this.height * 0.5 };
-  }
-
-  public context!: CanvasRenderingContext2D;
-  public preview!: HTMLCanvasElement;
+  private isMouseDown = false;
+  private focused: { key: number; state: boolean } = { key: 0, state: false };
+  private mousePosition: { x: number; y: number } = { x: 0, y: 0 };
 
   public canvas: fx.Canvas = fx.canvas();
-  public originCancas: fx.Canvas = fx.canvas();
-  public filterCancas: fx.Canvas = fx.canvas();
 
-  private nubs: { x: number; y: number }[] = [
-    { x: 10, y: 10 },
-    { x: 50, y: 10 },
-    { x: 50, y: 50 },
-    { x: 10, y: 50 }
+  public preview!: HTMLCanvasElement;
+  public context!: CanvasRenderingContext2D;
+
+  private texture!: fx.Texture;
+  private imageData!: ImageData;
+  private croppedURL!: string;
+  private offset: { x: number; y: number } = { x: 0, y: 0 };
+  private imageSize: { w: number; h: number } = { w: 0, h: 0 };
+  private size = 2048;
+
+  private points: { x: number; y: number }[] = [
+    { x: 0, y: 0 },
+    { x: 0, y: 0 },
+    { x: 0, y: 0 },
+    { x: 0, y: 0 }
   ];
-
-  private draggable: DraggableValue = {
-    onPositionChange: this.onPositionChanged
-  };
-
-  public onPositionChanged(
-    posDiff?: PositionDiff,
-    pos?: Position,
-    event?: any
-  ) {
-    console.log("left corner", pos?.left);
-    console.log("top corner", pos?.top);
-    console.log("event", event);
-    // console.log("posDiff", posDiff);
-
-    const index = event?.target.id;
-
-    // if ((index != null || index != undefined) && pos != undefined) {
-    if (["0", "1", "2", "3"].includes(index)) {
-      console.log(
-        "あ",
-        index,
-        "い",
-        pos,
-        this.preview.offsetLeft,
-        this.preview.offsetTop,
-        (this.$refs.bounder as HTMLElement).offsetLeft,
-        (this.$refs.bounder as HTMLElement).offsetTop,
-      );
-      const l = (this.$refs.bounder as HTMLElement).offsetLeft;
-      const t = (this.$refs.bounder as HTMLElement).offsetTop;
-      console.log('l:', l, 't:', t)
-      this.nubs[index].x = (event?.x || 0) - l;
-      this.nubs[index].y = (event?.y || 0) - t;
-    }
-    console.log(this.nubs);
-    this.drawLines();
-  }
-
-  private drawLines() {
-    const w = (this.$refs.preview as HTMLElement).offsetWidth;
-    const h = (this.$refs.preview as HTMLElement).offsetHeight;
-
-    console.log("キャンバスサイズ", w, h);
-    this.context.beginPath();
-    this.context.lineWidth = 1;
-    this.context.clearRect(0, 0, w * 2, h * 2);
-    this.context.moveTo(this.nubs[0].x * 2, this.nubs[0].y * 2);
-    this.context.lineTo(this.nubs[1].x * 2, this.nubs[1].y * 2);
-    this.context.lineTo(this.nubs[2].x * 2, this.nubs[2].y * 2);
-    this.context.lineTo(this.nubs[3].x * 2, this.nubs[3].y * 2);
-    this.context.lineTo(this.nubs[0].x * 2, this.nubs[0].y * 2);
-    this.context.closePath();
-    this.context.strokeStyle = "#F865B0";
-    this.context.stroke();
-
-    this.context.moveTo(0, 0);
-    this.context.lineTo(100, 0);
-    this.context.lineTo(100, 100);
-    this.context.lineTo(0, 100);
-    this.context.lineTo(0, 0);
-    this.context.stroke();
-  }
 
   @Prop()
   public currentFile!: File;
 
-  private drawRect() {
-    console.log(fx.Shader, fx.Canvas, fx.Texture)
-    fx.Shader.getDefaultShader().drawRect(10,10,200,200)
-  }
-
   @Watch("currentFile")
   public fileChanged() {
     if (this.currentFile === undefined || this.currentFile.name == "") {
-      // this.image = Preview.defaultSize;
-      // this.scale = 1.0;
-      // this.imageSrc = "";
       return;
     }
     const reader = new FileReader();
@@ -164,24 +88,44 @@ export default class ImageEditor extends Vue {
     reader.onload = e => {
       const img = new Image();
       img.onload = e => {
-        
-        
-        // this.context.drawImage(img, 0, 0);
-        // this.canvas.width = 512
-        // this.canvas.height = 512
-        this.canvas.style.width = "100%"
-        console.log(this.canvas.texture(img))
-        this.canvas.texture(img)._.drawTo(this.drawRect)
-        this.canvas.update()
-        // this.canvas.draw(this.canvas.texture(img), img.width, img.height).update();
-        // this.preview = this.canvas.draw(this.canvas.texture(img));
-        const ctx = this.canvas.getContext("webgl")!;
-        console.log(this.canvas, ctx, img.naturalWidth, img.width, img.naturalHeight, img.height)
+        const [h, w] = [img.height, img.width];
+        const l = Math.max(h / this.size, w / this.size);
+        this.imageSize = { w: w, h: h };
+        this.offset.x = (this.size - w / l) / 2;
+        this.offset.y = (this.size - h / l) / 2;
+        this.context.drawImage(img, this.offset.x, this.offset.y, w / l, h / l);
+        this.imageData = this.context.getImageData(0, 0, this.size, this.size);
+
+        const im = new Image();
+        im.onload = e => {
+          this.texture = this.canvas.texture(im);
+        };
+        im.src = this.preview.toDataURL();
+
+        this.resetPoints();
+        this.draw();
       };
       const f = e.target! as FileReader;
       img.src = f.result as string;
-      // this.imageSrc = img.src;
     };
+  }
+
+  private downloadFile() {
+    if (this.croppedURL != null) {
+      const url = this.croppedURL;
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", "file.jpg");
+      document.body.appendChild(link);
+      link.click();
+    }
+  }
+
+  private resetPoints() {
+    this.points[0] = { x: this.size / 4, y: this.size / 4 };
+    this.points[1] = { x: (this.size / 4) * 3, y: this.size / 4 };
+    this.points[2] = { x: (this.size / 4) * 3, y: (this.size / 4) * 3 };
+    this.points[3] = { x: this.size / 4, y: (this.size / 4) * 3 };
   }
 
   public mounted() {
@@ -189,51 +133,21 @@ export default class ImageEditor extends Vue {
     const c: any = document.getElementById("preview");
     this.context = c.getContext("2d")!;
     this.preview = c;
-    this.canvas.replace(view);
 
     this.width = window.innerWidth;
     this.height = window.innerHeight;
-    this.draggable.boundingElement = this.$refs.bounder as HTMLElement;
 
     window.addEventListener("resize", this.windowResize);
-
-    const demo: any = document.getElementById("demo");
-    const ctx: CanvasRenderingContext2D = demo.getContext("2d")!;
-    ctx.beginPath();
-    ctx.moveTo(10, 10);
-    ctx.lineTo(100, 10);
-    ctx.lineTo(100, 100);
-    ctx.lineTo(10, 100);
-    ctx.lineTo(10, 10);
-    ctx.closePath();
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(200, 0);
-    ctx.lineTo(200, 200);
-    ctx.lineTo(0, 200);
-    ctx.lineTo(0, 0);
-    ctx.closePath();
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(300, 0);
-    ctx.lineTo(300, 300);
-    ctx.lineTo(0, 300);
-    ctx.lineTo(0, 0);
-    ctx.closePath();
-    ctx.stroke();
-
-    ctx.beginPath();
-    // ctx.clearRect(0, 0, 200, 200)
-    ctx.arc(100, 100, 50, 0, Math.PI * 2);
-    ctx.fill();
+    document.addEventListener("mousemove", this.mouseMove, false);
+    document.addEventListener("mousedown", this.mouseDown, false);
+    document.addEventListener("mouseup", this.mouseUp, false);
   }
 
   public beforeDestroy() {
     window.removeEventListener("resize", this.windowResize);
+    document.removeEventListener("mousemove", this.mouseMove);
+    document.removeEventListener("mousedown", this.mouseDown);
+    document.removeEventListener("mouseup", this.mouseUp);
   }
 
   public windowResize(event: any) {
@@ -241,76 +155,121 @@ export default class ImageEditor extends Vue {
     this.height = window.innerHeight;
     console.log(this.width, this.height);
   }
+
+  private drawCropped() {
+    if (this.texture != null) {
+      const src = this.points
+        .map(e => [e.x, e.y])
+        .reduce((e, t) => e.concat(t, []));
+      const w = this.outputWidth,
+        h = this.outputHeight;
+      const dst = [0, 0, w, 0, w, h, 0, h];
+
+      const size = this.imageSize;
+      const c = this.canvas
+        .draw(this.texture, this.size, this.size)
+        .perspective(src, dst)
+        .update();
+
+      const cropped = document.getElementById("cropped") as HTMLCanvasElement;
+      const ctx: CanvasRenderingContext2D = cropped.getContext("2d")!;
+      const bytes = this.canvas.getPixelArray();
+
+      const data = new ImageData(
+        new Uint8ClampedArray(bytes),
+        c.width,
+        c.height
+      );
+      ctx.putImageData(data, 0, 0);
+      this.croppedURL = cropped.toDataURL("image/jpg");
+    }
+  }
+
+  private draw() {
+    const ctx = this.context;
+    ctx.putImageData(this.imageData, 0, 0);
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "#F865B0";
+    ctx.beginPath();
+    ctx.moveTo(this.points[3].x, this.points[3].y);
+    this.points.forEach(function(p) {
+      ctx.lineTo(p.x, p.y);
+    });
+    ctx.stroke();
+    ctx.closePath();
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+    this.points.forEach(function(p) {
+      ctx.lineTo(p.x, p.y);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 20, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.stroke();
+      ctx.closePath();
+    });
+
+    this.drawCropped();
+  }
+
+  public mouseMove(event: MouseEvent) {
+    if (!this.isMouseDown) {
+      return;
+    }
+    const rect = this.preview.getBoundingClientRect();
+    this.mousePosition = {
+      x: Math.round(
+        ((event.x - rect.left) * this.size) / (rect.right - rect.left)
+      ),
+      y: Math.round(
+        ((event.y - rect.top) * this.size) / (rect.bottom - rect.top)
+      )
+    };
+
+    this.mousePosition = {
+      x: Math.min(Math.max(this.mousePosition.x, 0), this.size),
+      y: Math.min(Math.max(this.mousePosition.y, 0), this.size)
+    };
+
+    if (this.focused.state) {
+      this.points.splice(this.focused.key, 1, this.mousePosition);
+      this.draw();
+      return;
+    }
+    this.points.forEach((e, i) => {
+      if (this.intersects(e)) {
+        this.focused.key = i;
+        this.focused.state = true;
+      }
+    });
+    this.draw();
+  }
+
+  public mouseUp(event: MouseEvent) {
+    this.isMouseDown = false;
+    this.focused.state = false;
+  }
+
+  public mouseDown(event: MouseEvent) {
+    this.isMouseDown = true;
+  }
+
+  private intersects(point: { x: number; y: number }) {
+    const r = 20;
+    const areaX = this.mousePosition.x - point.x;
+    const areaY = this.mousePosition.y - point.y;
+    return areaX * areaX + areaY * areaY <= r * r;
+  }
 }
 </script>
 
 <style>
-.demo {
-  border: 1px solid #444;
-  /* position: absolute; */
-  /* display: flex; */
-}
-
-.canvas {
-  border: 1px solid #444;
-  position: absolute;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  /* align-self: flex-end; */
-}
-
-.draw-canvas {
-  /* width: 100%; */
-  /* height: 100%; */
-  /* display: flex; */
-  border: 1px solid #444;
-  background-color: rgba(255, 255, 0, 0.2);
-}
-
-.image-preview {
-  /* width: 50%; */
-  /* aspect-ratio: 1; */
-  display: flex;
-  border: 1px solid #444;
-  /* background-color: #eaeaea; */
-  background-color: rgba(255, 255, 255, 0);
-  position: absolute;
-}
-
-.fill {
-  height: 100%;
-}
-
-.nub {
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  margin: 0px;
-  /* background: #3f9fff; */
-  /* background: -moz-linear-gradient(#7fbfff, #007fff); */
-  /* background: -webkit-gradient(
-    linear,
-    left top,
-    left bottom,
-    from(#7fbfff),
-    to(#007fff)
-  ); */
-  border: 1px solid #F865B0;
-  border-radius: 6px;
-  -moz-border-radius: 6px;
-  -webkit-border-radius: 6px;
-  /* box-shadow: 0 2px 2px rgba(0, 0, 0, 0.5); */
-  /* -moz-box-shadow: 0 2px 2px rgba(0, 0, 0, 0.5); */
-  /* -webkit-box-shadow: 0 2px 2px rgba(0, 0, 0, 0.5); */
-  cursor: move;
-}
-
-#nubs {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
+.preview {
+  position: relative;
+  background: #bfbfbf;
+  display: inline-block;
+  line-height: 479px;
+  overflow: hidden;
+  background: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQAQMAAAAlPW0iAAAABlBMVEW/v7////+Zw/90AAAAEUlEQVQI12P4z8CAFWEX/Q8Afr8P8erzE9cAAAAASUVORK5CYII=);
+  border: 1px solid black;
 }
 </style>

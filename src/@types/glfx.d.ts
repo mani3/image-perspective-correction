@@ -1,5 +1,6 @@
 declare module "glfx" {
   function canvas(): Canvas;
+  function shader(): Shader;
 
   export class Canvas extends HTMLCanvasElement {
     draw: (texture: Texture, width?: number, height?: number) => Canvas;
@@ -14,7 +15,6 @@ declare module "glfx" {
     drawTo: (callback: () => void) => void;
   }
   export class Shader {
-    (): Shader;
     drawRect: (left?: number, top?: number, right?: number, bottom?: number) => void;
     static getDefaultShader: () => Shader;
   }
